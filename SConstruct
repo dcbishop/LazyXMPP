@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import os.path
+import os
+import datetime
 from glob import glob
 
-prog_target = 'colladatest'
+prog_target = 'program'
 sources = glob('src/*.cpp')
 sources += glob('src/*/*.cpp')
 
@@ -10,7 +12,7 @@ env = Environment(build_dir='build')
 win32 = ARGUMENTS.get('win32', 0)
 debug_flag = ARGUMENTS.get('debug', 0)
 
-env.Tool('colourful', toolpath=['scons-tools'])
+#env.Tool('colourful', toolpath=['scons-tools'])
 #env.AppendUnique(LIBS=['m', 'IL', 'mxml', 'rcbc', 'luabind'])
 #env.Tool('qt')
 #env.AppendUnique(LIBS=['xerces-c', 'GL', 'GLU', 'IL'])#, 'boost_thread', 'libboost_system'])
@@ -45,6 +47,17 @@ env.Tool('colourful', toolpath=['scons-tools'])
 
 #env.ParseConfig('pkg-config --libs --cflags xerces-c')
 #env.ParseConfig('sdl-config --cflags --libs')
+
+build_date = datetime.datetime.today().strftime("%Y-%m-%d %H:%M")
+git_version = os.popen("git describe --always").read().strip()
+git_sha1 = os.popen("git rev-parse --verify HEAD").read().strip()
+
+print("Git commit version: " + git_version)
+
+env.Append(CPPDEFINES=['_BUILD_DATE=\\"' + build_date + '\\"'])
+env.Append(CPPDEFINES=['_GIT_VERSION=\\"' + git_version + '\\"'])
+env.Append(CPPDEFINES=['_GIT_SHA1=\\"' + git_sha1 + '\\"'])
+
 
 if int(debug_flag):
 	env.Append(CCFLAGS = ['-g'])
