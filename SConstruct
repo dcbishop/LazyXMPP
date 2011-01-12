@@ -12,7 +12,10 @@ env = Environment(build_dir='build')
 win32 = ARGUMENTS.get('win32', 0)
 debug_flag = ARGUMENTS.get('debug', 0)
 
-#env.Tool('colourful', toolpath=['scons-tools'])
+env.Tool('colourful', toolpath=['scons-tools'])
+
+env.AppendUnique(LIBS=['boost_thread', 'libboost_system'])
+
 #env.AppendUnique(LIBS=['m', 'IL', 'mxml', 'rcbc', 'luabind'])
 #env.Tool('qt')
 #env.AppendUnique(LIBS=['xerces-c', 'GL', 'GLU', 'IL'])#, 'boost_thread', 'libboost_system'])
