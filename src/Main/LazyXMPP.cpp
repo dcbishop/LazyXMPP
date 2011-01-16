@@ -1,35 +1,8 @@
 #include "../Main/LazyXMPP.hpp"
 
+#include <boost/bind.hpp>
+
 #include "../Debug/console.h"
-
-void LazyXMPPSession::Start() {
-   DEBUG_M("Bind read handler.");      
-   socket_.async_read_some(boost::asio::buffer(data_, max_length_), boost::bind(&LazyXMPPSession::ReadHandler, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
-};
-
-void LazyXMPPSession::ReadHandler(const boost::system::error_code& error, size_t bytes) {
-   DEBUG_M("Read handler fired.");
- 
-   try {
-      if (error == boost::asio::error::eof) {
-      DEBUG_M("Clean connection close...");
-      return;
-   
-      } else if(error) {
-         throw boost::system::system_error(error);
-      }
-   } catch (std::exception& e) {
-       ERROR("%s", e.what());
-   }
-
-   if(!error) {
-      DEBUG_M("Read %d bytes.", bytes);
-      DEBUG_M("'%s'", data_);
-      Start();
-   } else {
-      ERROR("Read error");
-   }
-}
 
 LazyXMPP::LazyXMPP(int port) : port_(port) {
    LOG("Starting LazyXMPP server.");
@@ -39,32 +12,61 @@ LazyXMPP::LazyXMPP(int port) : port_(port) {
       DEBUG_M("Start Accepting");
       StartAccepting_();
       DEBUG_M("io_service running");
-      io_service_.run();
+      XMLPlatformUtils::Initialize();
+
+      try {
+         thread_.reset(new boost::thread(boost::bind(&boost::asio::io_service::run, &io_service_)));
+      } catch (void *e) {
+         ERROR("Could not create thread...");
+      }
    } catch(exception& e) {
       ERROR("%s. %s", e.what(), SYMBOL_FATAL);
    }
    LOG("LazyXMPP server started.");
+   thread_->detach();
 }
 
 void LazyXMPP::StartAccepting_() {
    DEBUG_M("LazyXMPP binding accept handler.");
-   LazyXMPPSessionPtr session(new LazyXMPPSession(io_service_));
+   LazyXMPPConnectionPtr session(new LazyXMPPConnection(io_service_, this));
    acceptor_->async_accept(session->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session, boost::asio::placeholders::error));
    DEBUG_M("bound accept handler.");
 }
 
-void LazyXMPP::AcceptHandler_(LazyXMPPSessionPtr session, const boost::system::error_code& error) {
+void LazyXMPP::AcceptHandler_(LazyXMPPConnectionPtr session, const boost::system::error_code& error) {
    DEBUG_M("AcceptHandler fired.");
    if(!error) {
-      session->Start();
+      session->BindRead();
+      addConnection_(session.get());
       StartAccepting_();
    } else {
       ERROR("There was an ASIO accept error...");
    }
 }
 
+/*string LazyXMPP::getConnectionFromUsername(const string& user) {
+
+}*/
+
+void LazyXMPP::WriteJid(const string& jid, const char* data, const int& size) {
+   connections_mutex_.lock();
+   
+
+   for (Connections::iterator it=connections_.begin() ; it != connections_.end(); it++ ) {
+      string temp_jid = (*it)->getJid();
+      string temp_jid_r = (*it)->getFullJid();
+      if((temp_jid.compare(jid) == 0) || (temp_jid_r.compare(jid) == 0)) {
+         DEBUG_M("Found target...");
+         (*it)->Write(data, size);
+      }
+   }
+   DEBUG_M("Target not found...");
+   connections_mutex_.unlock();
+}
+
 LazyXMPP::~LazyXMPP() {
    DEBUG_M("io service shutdown.");
    io_service_.stop();
+   XMLPlatformUtils::Terminate();
    //delete acceptor_;
 }
