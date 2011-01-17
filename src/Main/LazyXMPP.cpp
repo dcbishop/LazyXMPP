@@ -12,7 +12,7 @@ LazyXMPP::LazyXMPP(int port) : port_(port) {
       DEBUG_M("Start Accepting");
       StartAccepting_();
       DEBUG_M("io_service running");
-      XMLPlatformUtils::Initialize();
+      XMLPlatformUtils::Initialize(); // Initilize Xerces...
 
       try {
          thread_.reset(new boost::thread(boost::bind(&boost::asio::io_service::run, &io_service_)));
@@ -26,6 +26,9 @@ LazyXMPP::LazyXMPP(int port) : port_(port) {
    thread_->detach();
 }
 
+/**
+ * Bind ASIO to accept a connection.
+ */
 void LazyXMPP::StartAccepting_() {
    DEBUG_M("LazyXMPP binding accept handler.");
    LazyXMPPConnectionPtr session(new LazyXMPPConnection(io_service_, this));
@@ -33,24 +36,27 @@ void LazyXMPP::StartAccepting_() {
    DEBUG_M("bound accept handler.");
 }
 
+/**
+ * Fires when a new connection is recieved, accepts it.
+ */
 void LazyXMPP::AcceptHandler_(LazyXMPPConnectionPtr session, const boost::system::error_code& error) {
    DEBUG_M("AcceptHandler fired.");
    if(!error) {
-      session->BindRead();
-      addConnection_(session.get());
+      LOG("Connection from %s.", session->getAddress().c_str());
+      // TODO: Block any banned ip addresses.
+      session->BindRead(); // Bind ASIO to start accepting data on this connection
+      addConnection_(session.get()); // Add our new connection to the list of connections.
       StartAccepting_();
    } else {
       ERROR("There was an ASIO accept error...");
    }
 }
 
-/*string LazyXMPP::getConnectionFromUsername(const string& user) {
-
-}*/
-
+/**
+ * Dispatches data to a connection based on it's Jabber ID (either full or normal).
+ */
 void LazyXMPP::WriteJid(const string& jid, const char* data, const int& size) {
    connections_mutex_.lock();
-   
 
    for (Connections::iterator it=connections_.begin() ; it != connections_.end(); it++ ) {
       string temp_jid = (*it)->getJid();
@@ -66,7 +72,7 @@ void LazyXMPP::WriteJid(const string& jid, const char* data, const int& size) {
 
 LazyXMPP::~LazyXMPP() {
    DEBUG_M("io service shutdown.");
+   // TODO: Shutdown all the connections...
    io_service_.stop();
    XMLPlatformUtils::Terminate();
-   //delete acceptor_;
 }

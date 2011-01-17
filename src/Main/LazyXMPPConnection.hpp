@@ -59,6 +59,7 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       string StringifyNode(const DOMNode* node) const;
       inline void PresenceHandler(DOMElement* element);
       inline string generatePresence(const string& to, const string& type) const;
+      string getAddress() const;
 
       void addToRosters();
 
