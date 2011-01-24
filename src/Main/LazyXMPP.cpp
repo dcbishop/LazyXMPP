@@ -4,26 +4,70 @@
 
 #include "../Debug/console.h"
 
-LazyXMPP::LazyXMPP(int port) : port_(port) {
+LazyXMPP::LazyXMPP(int port, bool enableIPv6, bool enableIPv4) : port_(port), enableIPv6_(enableIPv6), enableIPv4_(enableIPv4) {
    LOG("Starting LazyXMPP server.");
+   acceptor4_ = NULL;
+   acceptor6_ = NULL;
+   
+   if(!enableIPv6 && !enableIPv4) {
+      LOG("You must enable a socket type!");
+      return;
+   }
+   
+   if(!enableIPv4) {
+      // TODO: Turn ipv6 only option on acceptor if v4 is disabled...
+      WARNING("You turned off IPv4 support, please note that dual stack operating systems will still open up an IPv4 socket with the IPv6 one.");
+   }
+   
+   // Setup IPv6/dualstack connection acceptor...
+   if(enableIPv6_) {
+      try {
+         DEBUG_M("New acceptor.");
+         DEBUG_M("Starting IPv6 acceptor...");
+
+         // On POSIX compatible systems and Windows starting at Vista, dual stack allows for both IPv4 and IPv6 on the one interface.
+         
+         acceptor6_ = new tcp::acceptor(io_service_, tcp::endpoint(tcp::v6(), port));
+      } catch(exception& e) {
+         ERROR("%s. %s", e.what(), SYMBOL_FATAL);
+      }
+   }
+
+   // Setup IPv6 connection acceptor...
+   if(enableIPv4_) {
+      try {
+         ip::v6_only option;
+         acceptor6_->get_option(option);
+
+         // If there is no IPv6 socket or the socket doesn't support dual stack with IPv4, bring up a seperate IPv4 socket.
+         if(!acceptor6_ || option.value()) {
+            acceptor4_ = new tcp::acceptor(io_service_, tcp::endpoint(tcp::v4(), port));
+         } else {
+            DEBUG_M("Dual stack supported, skipping IPv4 socket...");
+         }
+      } catch(exception& e) {
+         ERROR("%s. %s", e.what(), SYMBOL_FATAL);
+      }
+   }
+   
    try {
-      DEBUG_M("New acceptor.");
-      acceptor_ = new tcp::acceptor(io_service_, tcp::endpoint(tcp::v4(), port));
       DEBUG_M("Start Accepting");
       StartAccepting_();
       DEBUG_M("io_service running");
       XMLPlatformUtils::Initialize(); // Initilize Xerces...
 
-      try {
-         thread_.reset(new boost::thread(boost::bind(&boost::asio::io_service::run, &io_service_)));
-      } catch (void *e) {
-         ERROR("Could not create thread...");
-      }
    } catch(exception& e) {
       ERROR("%s. %s", e.what(), SYMBOL_FATAL);
    }
-   LOG("LazyXMPP server started.");
-   thread_->detach();
+
+   try {
+      // Thead off the io_service...
+      thread_.reset(new boost::thread(boost::bind(&boost::asio::io_service::run, &io_service_)));
+      LOG("LazyXMPP server started.");
+      thread_->detach();
+   } catch (void *e) {
+      ERROR("Could not create thread...");
+   }  
 }
 
 /**
@@ -31,8 +75,17 @@ LazyXMPP::LazyXMPP(int port) : port_(port) {
  */
 void LazyXMPP::StartAccepting_() {
    DEBUG_M("LazyXMPP binding accept handler.");
-   LazyXMPPConnectionPtr session(new LazyXMPPConnection(io_service_, this));
-   acceptor_->async_accept(session->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session, boost::asio::placeholders::error));
+   
+   if(acceptor6_) {
+      LazyXMPPConnectionPtr session6(new LazyXMPPConnection(io_service_, this));
+      acceptor6_->async_accept(session6->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session6, boost::asio::placeholders::error));
+   }
+   
+   if(acceptor4_) {
+      LazyXMPPConnectionPtr session4(new LazyXMPPConnection(io_service_, this));
+      acceptor4_->async_accept(session4->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session4, boost::asio::placeholders::error));
+   }
+   
    DEBUG_M("bound accept handler.");
 }
 
