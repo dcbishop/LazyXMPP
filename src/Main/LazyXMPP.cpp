@@ -32,15 +32,18 @@ LazyXMPP::LazyXMPP(int port, bool enableIPv6, bool enableIPv4) : port_(port), en
          ERROR("%s. %s", e.what(), SYMBOL_FATAL);
       }
    }
+   
+   if(acceptor6_) {
+      ip::v6_only option;
+      acceptor6_->get_option(option);
+      isDualStack_ = !option.value();
+   }
 
    // Setup IPv6 connection acceptor...
    if(enableIPv4_) {
       try {
-         ip::v6_only option;
-         acceptor6_->get_option(option);
-
          // If there is no IPv6 socket or the socket doesn't support dual stack with IPv4, bring up a seperate IPv4 socket.
-         if(!acceptor6_ || option.value()) {
+         if(!acceptor6_ || !isDualStack_) {
             acceptor4_ = new tcp::acceptor(io_service_, tcp::endpoint(tcp::v4(), port));
          } else {
             DEBUG_M("Dual stack supported, skipping IPv4 socket...");
@@ -78,12 +81,12 @@ void LazyXMPP::StartAccepting_() {
    
    if(acceptor6_) {
       LazyXMPPConnectionPtr session6(new LazyXMPPConnection(io_service_, this));
-      acceptor6_->async_accept(session6->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session6, boost::asio::placeholders::error));
+      acceptor6_->async_accept(session6->getSocket_(), boost::bind(&LazyXMPP::AcceptHandler_, this, session6, boost::asio::placeholders::error));
    }
    
    if(acceptor4_) {
       LazyXMPPConnectionPtr session4(new LazyXMPPConnection(io_service_, this));
-      acceptor4_->async_accept(session4->getSocket(), boost::bind(&LazyXMPP::AcceptHandler_, this, session4, boost::asio::placeholders::error));
+      acceptor4_->async_accept(session4->getSocket_(), boost::bind(&LazyXMPP::AcceptHandler_, this, session4, boost::asio::placeholders::error));
    }
    
    DEBUG_M("bound accept handler.");
@@ -97,7 +100,7 @@ void LazyXMPP::AcceptHandler_(LazyXMPPConnectionPtr session, const boost::system
    if(!error) {
       LOG("Connection from %s.", session->getAddress().c_str());
       // TODO: Block any banned ip addresses.
-      session->BindRead(); // Bind ASIO to start accepting data on this connection
+      session->BindRead_(); // Bind ASIO to start accepting data on this connection
       addConnection_(session.get()); // Add our new connection to the list of connections.
       StartAccepting_();
    } else {
@@ -126,6 +129,8 @@ void LazyXMPP::WriteJid(const string& jid, const char* data, const int& size) {
 LazyXMPP::~LazyXMPP() {
    DEBUG_M("io service shutdown.");
    // TODO: Shutdown all the connections...
+   delete acceptor4_;
+   delete acceptor6_;
    io_service_.stop();
    XMLPlatformUtils::Terminate();
 }

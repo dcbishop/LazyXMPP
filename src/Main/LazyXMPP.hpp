@@ -34,7 +34,6 @@ class LazyXMPP {
       void removeConnection_(LazyXMPPConnection* connection) { connections_mutex_.lock(); connections_ .erase(connection); connections_mutex_.unlock();}
       void WriteJid(const string& jid, const char* data, const int& size);
 
-
       const int port_;
       boost::asio::io_service io_service_;
       tcp::acceptor* acceptor4_;
@@ -47,6 +46,7 @@ class LazyXMPP {
       
       bool enableIPv6_;
       bool enableIPv4_;
+      bool isDualStack_;
 
 };
 

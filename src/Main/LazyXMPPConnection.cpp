@@ -61,13 +61,13 @@ LazyXMPPConnection::~LazyXMPPConnection() {
  */
 void LazyXMPPConnection::Write(const char* data, const int& size) {
    DEBUG_M("WRITE: '%s'", data);
-   boost::asio::async_write(socket_, boost::asio::buffer(data, size), boost::bind(&LazyXMPPConnection::WriteHandler, shared_from_this(), boost::asio::placeholders::error));
+   boost::asio::async_write(socket_, boost::asio::buffer(data, size), boost::bind(&LazyXMPPConnection::WriteHandler_, shared_from_this(), boost::asio::placeholders::error));
 }
 
 /**
  * Decides what to do with a XMPP stanza based on it's type.
  */
-void LazyXMPPConnection::Chooser(const char* tag_name_c, DOMElement* element) {
+void LazyXMPPConnection::Chooser_(const char* tag_name_c, DOMElement* element) {
    static const string stream = "stream:stream";
    static const string starttls = "starttls";
    static const string auth = "auth";
@@ -78,14 +78,14 @@ void LazyXMPPConnection::Chooser(const char* tag_name_c, DOMElement* element) {
    // Match a <stream> tag.
    if(stream.compare(tag_name_c) == 0) {
       DEBUG_M("XMPP new stream detected...");
-      StreamHandler(element);
+      StreamHandler_(element);
       return;
    }
 
    // Everything below needs to be in an established stream...   
    if(!isInStream_) {
       DEBUG_M("XMPP recieved out of stream.");
-      BindRead();
+      BindRead_();
       return;
    }
 
@@ -98,23 +98,23 @@ void LazyXMPPConnection::Chooser(const char* tag_name_c, DOMElement* element) {
       return;
    } else if(auth.compare(tag_name_c) == 0) { // Match an <auth> tag.
       DEBUG_M("Auth recieved...");  
-      AuthHandler(element);
+      AuthHandler_(element);
       return;
    } 
 
    // Everything below needs to be authorized.
    if(connection_type_ < 1) {
       // TODO: Send not authorized error response.
-      BindRead();
+      BindRead_();
       return;
    }
 
    if(iq.compare(tag_name_c) == 0) { // Match <iq> tag.
-      IqHandler(element);
+      IqHandler_(element);
    } else if (message.compare(tag_name_c) == 0) {
-      MessageHandler(element);
+      MessageHandler_(element);
    } else if (presence.compare(tag_name_c) == 0) {
-      PresenceHandler(element);
+      PresenceHandler_(element);
    } else {
       DEBUG_M("Unknown XMPP stanza... '%s'", tag_name_c);
    }
@@ -123,10 +123,10 @@ void LazyXMPPConnection::Chooser(const char* tag_name_c, DOMElement* element) {
 /**
  * The ASIO write handler.
  */
-void LazyXMPPConnection::WriteHandler(const boost::system::error_code& error) {
+void LazyXMPPConnection::WriteHandler_(const boost::system::error_code& error) {
    DEBUG_M("Write handler fired...");
    if(!error && !connection_close_) { // If theres no error and we arn't closing this connection, bind another read.
-      BindRead();
+      BindRead_();
    } else if(error) {
       DEBUG_M("Write error...");
    } else {
@@ -138,7 +138,7 @@ void LazyXMPPConnection::WriteHandler(const boost::system::error_code& error) {
  * Parses the data read from socket into XML.
  */
 // TODO: Put the XML parsing things somewhere else as static rather than create new ones every request.
-void LazyXMPPConnection::Process(const int size) {
+void LazyXMPPConnection::Process_(const int size) {
    XMLByte* data_xml_ = reinterpret_cast<XMLByte*>(data_);
    InputSource* in = new MemBufInputSource(data_xml_, size, "xmppstanza", false);
 
@@ -192,7 +192,7 @@ void LazyXMPPConnection::Process(const int size) {
       char* tag_name_c = XMLString::transcode(tag_name);
 
       DEBUG_M("Tag name '%s'...", tag_name_c);
-      Chooser(tag_name_c, elementRoot);
+      Chooser_(tag_name_c, elementRoot);
 
       XMLString::release(&tag_name_c);
    }
@@ -205,15 +205,15 @@ void LazyXMPPConnection::Process(const int size) {
 /**
  * Binds ASIO handler for reading data.
  */
-void LazyXMPPConnection::BindRead() {
+void LazyXMPPConnection::BindRead_() {
    DEBUG_M("Bind read handler.");      
-   socket_.async_read_some(boost::asio::buffer(data_, max_length_), boost::bind(&LazyXMPPConnection::ReadHandler, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+   socket_.async_read_some(boost::asio::buffer(data_, max_length_), boost::bind(&LazyXMPPConnection::ReadHandler_, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
 };
 
 /**
  * The ASIO read handler.
  */
-void LazyXMPPConnection::ReadHandler(const boost::system::error_code& error, size_t bytes) {
+void LazyXMPPConnection::ReadHandler_(const boost::system::error_code& error, size_t bytes) {
    DEBUG_M("Read handler fired, read %d bytes.", bytes);
 
    // Check for read error
@@ -240,8 +240,8 @@ void LazyXMPPConnection::ReadHandler(const boost::system::error_code& error, siz
 
    if(!error) {
       DEBUG_M("READ: '%s'", data_);
-      Process(bytes);
-      BindRead();
+      Process_(bytes);
+      BindRead_();
    } else {
       ERROR("Read error");
    }
@@ -250,13 +250,13 @@ void LazyXMPPConnection::ReadHandler(const boost::system::error_code& error, siz
 /**
  * Handles a request to open an XMPP stream.
  */
-void LazyXMPPConnection::StreamHandler(const DOMElement* element) {
+void LazyXMPPConnection::StreamHandler_(const DOMElement* element) {
    // FIXME:
    // Check to see if 'to' is actually the server.
    // Check to see if IP banned (although maybe ip bans should be a the socket level, although here we can send a message)
    // Check there isn't too many streams already, etc...
    // Maybe keep track of the streams & ids?
-   string response = XMPP_XML_HEADER_ + generateStreamResponse(generateRandomId()) + generateStreamFeatures();
+   string response = XMPP_XML_HEADER_ + generateStreamResponse_(generateRandomId_()) + generateStreamFeatures_();
    isInStream_ = true;
    Write(response.c_str(), response.size());
 }
@@ -264,14 +264,14 @@ void LazyXMPPConnection::StreamHandler(const DOMElement* element) {
 /**
  * Generates a stream request response XMPP stanza.
  */
-string LazyXMPPConnection::generateStreamResponse(const string& streamid) const {
+string LazyXMPPConnection::generateStreamResponse_(const string& streamid) const {
    return XMPP_STREAM_RESPONSE_01 + server_->getServerHostname() + XMPP_STREAM_RESPONSE_02 + streamid + XMPP_STREAM_RESPONSE_03;
 }
 
 /**
  * Generates a random id number (based on a UUID).
  */
-string LazyXMPPConnection::generateRandomId() const {
+string LazyXMPPConnection::generateRandomId_() const {
    uuid_t uuid;
    char uuid_c[37];
    uuid_generate(uuid);
@@ -282,14 +282,14 @@ string LazyXMPPConnection::generateRandomId() const {
 /**
  * Generate a stream features XMPP stanza.
  */
-string LazyXMPPConnection::generateStreamFeatures() const {
-   return XMPP_STREAMFEATURES_01 + generateStreamFeaturesTLS() + generateStreamFeaturesMechanisms() + generateStreamFeaturesCompression() + generateStreamFeaturesBind() + generateStreamFeaturesSession() + XMPP_STREAMFEATURES_02;
+string LazyXMPPConnection::generateStreamFeatures_() const {
+   return XMPP_STREAMFEATURES_01 + generateStreamFeaturesTLS_() + generateStreamFeaturesMechanisms_() + generateStreamFeaturesCompression_() + generateStreamFeaturesBind_() + generateStreamFeaturesSession_() + XMPP_STREAMFEATURES_02;
 }
 
 /**
  * Generates a TLS stream feature entry.
  */
-string LazyXMPPConnection::generateStreamFeaturesTLS() const {
+string LazyXMPPConnection::generateStreamFeaturesTLS_() const {
    // FIXME: Support TLS...
    return "";
 }
@@ -297,7 +297,7 @@ string LazyXMPPConnection::generateStreamFeaturesTLS() const {
 /**
  * Generates a serialized list of authentication mechanisms as a stream feature entry.
  */
-string LazyXMPPConnection::generateStreamFeaturesMechanisms() const {
+string LazyXMPPConnection::generateStreamFeaturesMechanisms_() const {
    // FIXME: Support secure logins...
    
    // Don't offer mechanisms if we are already logged in.
@@ -310,7 +310,7 @@ string LazyXMPPConnection::generateStreamFeaturesMechanisms() const {
 /**
  * Generates a serialized compression stream feature entry.
  */
-string LazyXMPPConnection::generateStreamFeaturesCompression() const {
+string LazyXMPPConnection::generateStreamFeaturesCompression_() const {
    // FIXME: Support compression...
    return "";
 }
@@ -318,7 +318,7 @@ string LazyXMPPConnection::generateStreamFeaturesCompression() const {
 /**
  * Generates a serialized bind stream feature entry.
  */
-string LazyXMPPConnection::generateStreamFeaturesBind() const {
+string LazyXMPPConnection::generateStreamFeaturesBind_() const {
    // If we have authenticated but not yet bound a resource...
    if(connection_type_ > 0 && !isBound_) {
       return XMPP_STREAMFEATURES_BIND;
@@ -329,7 +329,7 @@ string LazyXMPPConnection::generateStreamFeaturesBind() const {
 /**
  * Generates a serialized session stream feature entry.
  */
-string LazyXMPPConnection::generateStreamFeaturesSession() const { 
+string LazyXMPPConnection::generateStreamFeaturesSession_() const { 
    if(connection_type_ > 0 && !isBound_) {
       return XMPP_STREAMFEATURES_SESSION;
    }
@@ -339,17 +339,17 @@ string LazyXMPPConnection::generateStreamFeaturesSession() const {
 /**
  * Handles an authentication request.
  */
-void LazyXMPPConnection::AuthHandler(const DOMElement* element) {
-   string auth_mechanism = getDOMAttribute(element, "mechanism");
+void LazyXMPPConnection::AuthHandler_(const DOMElement* element) {
+   string auth_mechanism = getDOMAttribute_(element, "mechanism");
    
    if(auth_mechanism.compare("PLAIN") == 0) {
       DEBUG_M("Recieved plain auth.");
-      AuthPlainHandler(element);
+      AuthPlainHandler_(element);
    } else if(auth_mechanism.compare("ANONYMOUS") == 0) {
       DEBUG_M("Recieved anonymous auth.");
-      setNodeId(generateRandomId());
+      setNodeId_(generateRandomId_());
       if(getNickname().empty()) {
-         setNickname(getNodeId());
+         setNickname_(getNodeId());
       }
       connection_type_ = ANONYMOUS;
       Write(XMPP_SUCCESS.c_str(), XMPP_SUCCESS.size());
@@ -364,7 +364,7 @@ void LazyXMPPConnection::AuthHandler(const DOMElement* element) {
 /**
  * Handles using an insecure plain auth.
  */
-void LazyXMPPConnection::AuthPlainHandler(const DOMElement* element) {
+void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
 
       // Decode the base 64
       const XMLCh* encoded_data_x = element->getTextContent();
@@ -419,9 +419,9 @@ void LazyXMPPConnection::AuthPlainHandler(const DOMElement* element) {
       Write(badauthm.c_str(), badauthm.size());*/
 
       // Set the node id (the bit befoure the @ in a JID). Also set the displayed nick name if there isn't one already.
-      setNodeId(nodeid);
+      setNodeId_(nodeid);
       if(getNickname().empty()) {
-         setNickname(getNodeId());
+         setNickname_(getNodeId());
       }
 
       // Set that this connection is authenticated and send a sucess response.
@@ -436,16 +436,16 @@ void LazyXMPPConnection::AuthPlainHandler(const DOMElement* element) {
 /**
  * Handles an iq request.
  */
-void LazyXMPPConnection::IqHandler(const DOMElement* element) {
-   string id = getDOMAttribute(element, "id");
-   string iq_type = getDOMAttribute(element, "type");
+void LazyXMPPConnection::IqHandler_(const DOMElement* element) {
+   string id = getDOMAttribute_(element, "id");
+   string iq_type = getDOMAttribute_(element, "type");
    
    // See what type of iq request this is...
    if(iq_type.compare("set") == 0) {
       DEBUG_M("Recieved iq set.");
-      IqSetHandler(id, element);
+      IqSetHandler_(id, element);
    } if(iq_type.compare("get") == 0) {
-      IqGetHandler(id, element);
+      IqGetHandler_(id, element);
    } else if(iq_type.compare("result") == 0) {
       // Do nothing...
    } else {
@@ -462,7 +462,7 @@ void LazyXMPPConnection::IqHandler(const DOMElement* element) {
 /**
  * Handles an iq set request.
  */
-void LazyXMPPConnection::IqSetHandler(const string& id, const DOMElement* element) {
+void LazyXMPPConnection::IqSetHandler_(const string& id, const DOMElement* element) {
    int length = element->getChildElementCount();
    if(length != 1) {
       DEBUG_M("Unexpected number of iq child elements.");
@@ -479,9 +479,9 @@ void LazyXMPPConnection::IqSetHandler(const string& id, const DOMElement* elemen
    DEBUG_M("IQ set '%s'", tag_name_s.c_str());
 
    if(tag_name_s.compare("bind") == 0) {
-      IqSetBind(id, child);
+      IqSetBind_(id, child);
    } else if(tag_name_s.compare("session") == 0) {
-      IqSetSession(id);
+      IqSetSession_(id);
    } else if(tag_name_s.compare("query") == 0) {
       // TODO
    }
@@ -493,12 +493,12 @@ void LazyXMPPConnection::IqSetHandler(const string& id, const DOMElement* elemen
  */
 // TODO: Rather than a roster system, use MUC.
 // TODO: This doesn't seem to work...
-void LazyXMPPConnection::addToRosters() {
+void LazyXMPPConnection::addToRosters_() {
    DEBUG_M("Entered function...");
    server_->connections_mutex_.lock();
    for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
       string to = (*it)->getJid();
-      string forward = generateIqHeader("set", generateRandomId(), to, getFullJid()) + XMPP_ROSTER_RESPONSE_01 + generateRosterItem(getNickname(), getFullJid(), "") + XMPP_ROSTER_RESPONSE_02 + XMPP_IQ_CLOSE;
+      string forward = generateIqHeader_("set", generateRandomId_(), to, getFullJid()) + XMPP_ROSTER_RESPONSE_01 + generateRosterItem_(getNickname(), getFullJid(), "") + XMPP_ROSTER_RESPONSE_02 + XMPP_IQ_CLOSE;
       
       (*it)->Write(forward.c_str(), forward.size());
    }
@@ -508,44 +508,44 @@ void LazyXMPPConnection::addToRosters() {
 /**
  * Handles a bind resource request.
  */
-void LazyXMPPConnection::IqSetBind(const string& id, const DOMElement* bind) {
+void LazyXMPPConnection::IqSetBind_(const string& id, const DOMElement* bind) {
    // TODO: Don't allow more than 1 bind per connection (unless XMPP does?)
-   DEBUG_M("IqSetBind.");
+   DEBUG_M("IqSetBind_.");
    static const string bind_s = "bind";
    
-   const DOMElement* resourceElement = getSingleDOMElementByTagName(bind, "resource");
+   const DOMElement* resourceElement = getSingleDOMElementByTagName_(bind, "resource");
      
    string resource;
    if(!resourceElement) {
-      resource = generateRandomId();
+      resource = generateRandomId_();
    } else {
       char *tag_name = XMLString::transcode(resourceElement->getTextContent());
       DEBUG_M("Requested resource '%s'", resource.c_str());
       resource = tag_name;
    }
    
-   setResource(resource);
+   setResource_(resource);
    isBound_ = true;
-   string response = generateIqResultBind(id, resource);
+   string response = generateIqResultBind_(id, resource);
    Write(response.c_str(), response.size());
-   addToRosters();
+   addToRosters_();
 }
 
 /**
  * Generates a serialized iq bind response stanza.
  */
 //TODO: Add an option to use /> to close rather than > for one line responses.
-string LazyXMPPConnection::generateIqResultBind(const string& id, const string& resource) const {
+string LazyXMPPConnection::generateIqResultBind_(const string& id, const string& resource) const {
    return XMPP_IQRESULT_BIND_01 + id + XMPP_IQRESULT_BIND_02 + getNodeId() + "@" + server_->getServerHostname() + "/" + resource + XMPP_IQRESULT_BIND_03;
 }
 
 /**
  * Handles an iq set session. This is apparently not really necessary but XMPP clients might expect the functionality.
  */
-void LazyXMPPConnection::IqSetSession(const string& id) {
+void LazyXMPPConnection::IqSetSession_(const string& id) {
    DEBUG_M("Entering function...");
    isSession_ = true;
-   string response = generateIqHeader("result", id, getFullJid()) + XMPP_IQRESULT_SESSION_01 + XMPP_IQ_CLOSE;
+   string response = generateIqHeader_("result", id, getFullJid()) + XMPP_IQRESULT_SESSION_01 + XMPP_IQ_CLOSE;
    Write(response.c_str(), response.size());
 }
 
@@ -573,7 +573,7 @@ string LazyXMPPConnection::getFullJid() const {
 /**
  * Handles an iq get request.
  */
-void LazyXMPPConnection::IqGetHandler(const string& id, const DOMElement* element) {
+void LazyXMPPConnection::IqGetHandler_(const string& id, const DOMElement* element) {
    DEBUG_M("Entering function...");
    int length = element->getChildElementCount();
    if(length != 1) {
@@ -595,9 +595,9 @@ void LazyXMPPConnection::IqGetHandler(const string& id, const DOMElement* elemen
    } else if(tag_name_s.compare("session") == 0) {
       // TODO
    } else if(tag_name_s.compare("query") == 0) {
-      IqGetQueryHandler(id, child);
+      IqGetQueryHandler_(id, child);
    } else if(tag_name_s.compare("ping") == 0) {
-      string response = generateIqHeader("result", id, getFullJid(), server_->getServerHostname()) + XMPP_IQ_CLOSE;
+      string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + XMPP_IQ_CLOSE;
       Write(response.c_str(), response.size());
    }
    
@@ -607,19 +607,19 @@ void LazyXMPPConnection::IqGetHandler(const string& id, const DOMElement* elemen
 /**
  * Handles an iq query request.
  */
-void LazyXMPPConnection::IqGetQueryHandler(const string& id, const DOMElement* element) {
+void LazyXMPPConnection::IqGetQueryHandler_(const string& id, const DOMElement* element) {
    DEBUG_M("Entering function...");
    
-   string query_type_s = getDOMAttribute(element, "xmlns");
+   string query_type_s = getDOMAttribute_(element, "xmlns");
    
    if(query_type_s.compare("jabber:iq:roster") == 0) {
-      IqGetQueryRosterHandler(id, element);
+      IqGetQueryRosterHandler_(id, element);
    } else if(query_type_s.compare("http://jabber.org/protocol/disco#items") == 0) {
-      IqGetQueryDiscoItems(id, element);
+      IqGetQueryDiscoItems_(id, element);
    } else if(query_type_s.compare("http://jabber.org/protocol/disco#info") == 0) {
-      IqGetQueryDiscoInfo(id, element);
+      IqGetQueryDiscoInfo_(id, element);
    } else {
-      string response = generateIqHeader("error", id, getFullJid(), server_->getServerHostname()) + "<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" + XMPP_IQ_CLOSE;
+      string response = generateIqHeader_("error", id, getFullJid(), server_->getServerHostname()) + "<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" + XMPP_IQ_CLOSE;
       Write(response.c_str(), response.size());
    }
 }
@@ -628,8 +628,8 @@ void LazyXMPPConnection::IqGetQueryHandler(const string& id, const DOMElement* e
  * Handles a service discovery info query.
  */
 // TODO
-void LazyXMPPConnection::IqGetQueryDiscoItems(const string& id, const DOMElement* element) {
-   string response = generateIqHeader("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
+void LazyXMPPConnection::IqGetQueryDiscoItems_(const string& id, const DOMElement* element) {
+   string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
    Write(response.c_str(), response.size()); 
 }
 
@@ -637,15 +637,15 @@ void LazyXMPPConnection::IqGetQueryDiscoItems(const string& id, const DOMElement
  * Handles a service discovery info query.
  */
 // TODO
-void LazyXMPPConnection::IqGetQueryDiscoInfo(const string& id, const DOMElement* element) {
-   string response = generateIqHeader("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
+void LazyXMPPConnection::IqGetQueryDiscoInfo_(const string& id, const DOMElement* element) {
+   string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
    Write(response.c_str(), response.size()); 
 }
 
 /**
  * Generates a serialzed <iq> header for a XMPP stanza.
  */
-string LazyXMPPConnection::generateIqHeader(const string& type, const string& id, const string& to, const string& from) const {
+string LazyXMPPConnection::generateIqHeader_(const string& type, const string& id, const string& to, const string& from) const {
    string header = XMPP_IQ_01 + type + XMPP_IQ_02 + id;
    if(!to.empty()) {
       header.append(XMPP_IQ_03 + to);
@@ -660,16 +660,16 @@ string LazyXMPPConnection::generateIqHeader(const string& type, const string& id
 /**
  * Handles a iq roster get request.
  */
-void LazyXMPPConnection::IqGetQueryRosterHandler(const string& id, const DOMElement* element) {
+void LazyXMPPConnection::IqGetQueryRosterHandler_(const string& id, const DOMElement* element) {
    DEBUG_M("Entering function...");
-   string response = generateIqHeader("result", id, getJid()) + XMPP_ROSTER_RESPONSE_01 + generateRosterItems() + XMPP_ROSTER_RESPONSE_02 + XMPP_IQ_CLOSE;
+   string response = generateIqHeader_("result", id, getJid()) + XMPP_ROSTER_RESPONSE_01 + generateRosterItems_() + XMPP_ROSTER_RESPONSE_02 + XMPP_IQ_CLOSE;
    Write(response.c_str(), response.size());
 }
 
 /**
  * Generates all the items to go into a XMPP roster stanza.
  */
-string LazyXMPPConnection::generateRosterItems() const {
+string LazyXMPPConnection::generateRosterItems_() const {
    DEBUG_M("Entering function...");
    // TODO
    string roster;
@@ -679,7 +679,7 @@ string LazyXMPPConnection::generateRosterItems() const {
    for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
       string nickname = (*it)->getNickname();
       string jid = (*it)->getJid();
-      roster.append(generateRosterItem(nickname, jid, ""));
+      roster.append(generateRosterItem_(nickname, jid, ""));
    }
    
    server_->connections_mutex_.unlock();
@@ -689,7 +689,7 @@ string LazyXMPPConnection::generateRosterItems() const {
 /**
  * Generates a seialized roster item for a XMPP stanza.
  */
-string LazyXMPPConnection::generateRosterItem(const string& name, const string& jid, const string& group = "") const {
+string LazyXMPPConnection::generateRosterItem_(const string& name, const string& jid, const string& group = "") const {
    string result = XMPP_ITEM_01 + name + XMPP_ITEM_02 + jid + XMPP_ITEM_03;
    if(!group.empty()) {
       result.append(XMPP_GROUP_01 + group + XMPP_GROUP_CLOSE);
@@ -702,7 +702,7 @@ string LazyXMPPConnection::generateRosterItem(const string& name, const string& 
  * A Xerces-c cheat code to avoid having to do all the transcoding stuff every time. Returns a std::string with the atribute value.
  */
 // TODO: It's probably better to replace the raw strings with a bunch of static, pretranscoded xerces XMLCh* ones to avoid transcodes at runtime.
-string LazyXMPPConnection::getDOMAttribute(const DOMElement* element, const string& attribute_name) const {
+string LazyXMPPConnection::getDOMAttribute_(const DOMElement* element, const string& attribute_name) const {
    XMLCh* attribute_name_x = XMLString::transcode(attribute_name.c_str());
    char *attribute_name_c = XMLString::transcode(element->getAttribute(attribute_name_x));
    string attribute_name_s = attribute_name_c;
@@ -714,7 +714,7 @@ string LazyXMPPConnection::getDOMAttribute(const DOMElement* element, const stri
 /**
  * Another Xerces-c cheat code to avoid having to do a dynamic cast or situations where the wrong number of elements are contained.
  */
-DOMElement* LazyXMPPConnection::getSingleDOMElementByTagName(const DOMElement* element, const string& tag) const {
+DOMElement* LazyXMPPConnection::getSingleDOMElementByTagName_(const DOMElement* element, const string& tag) const {
    XMLCh* tag_x = XMLString::transcode(tag.c_str());
    DOMNodeList* children = element->getElementsByTagName(tag_x);
    XMLString::release(&tag_x);
@@ -735,7 +735,7 @@ DOMElement* LazyXMPPConnection::getSingleDOMElementByTagName(const DOMElement* e
 /**
  * Xerces cheat. Gets the text inbetween open and close tags as a string.
  */
-string LazyXMPPConnection::getTextContent(const DOMElement* element) const {
+string LazyXMPPConnection::getTextContent_(const DOMElement* element) const {
    const XMLCh* data_x = element->getTextContent();
    char* data_c = XMLString::transcode(data_x);
    string result = data_c;
@@ -746,7 +746,7 @@ string LazyXMPPConnection::getTextContent(const DOMElement* element) const {
 /**
  * Serializes Xerces DOM data into plain text.
  */
-string LazyXMPPConnection::StringifyNode(const DOMNode* node) const {
+string LazyXMPPConnection::StringifyNode_(const DOMNode* node) const {
    XMLCh tempStr[max_length_];
    XMLString::transcode("LS", tempStr, max_length_-1);
    DOMImplementation *impl = DOMImplementationRegistry::getDOMImplementation(tempStr);
@@ -763,7 +763,7 @@ string LazyXMPPConnection::StringifyNode(const DOMNode* node) const {
 /**
  * Xerces cheat. Sets an attribute on an element from strings.
  */
-void LazyXMPPConnection::setDOMAttribute(DOMElement* element, const string& attribute, const string& value) const {
+void LazyXMPPConnection::setDOMAttribute_(DOMElement* element, const string& attribute, const string& value) const {
    XMLCh* value_x = XMLString::transcode(value.c_str());
    XMLCh* attribute_x = XMLString::transcode(attribute.c_str());
    element->setAttribute(attribute_x, value_x);
@@ -774,24 +774,24 @@ void LazyXMPPConnection::setDOMAttribute(DOMElement* element, const string& attr
 /**
  * Handles a XMPP <message>.
  */
-void LazyXMPPConnection::MessageHandler(DOMElement* element) {
+void LazyXMPPConnection::MessageHandler_(DOMElement* element) {
    // This function is way to heavy, all it really needs to do if forward the messages with an added 'from' but by now it's already been parsed and needs to be serialized, this entire thing should be done with SAX.
    //TODO
-   string to = getDOMAttribute(element, "to");
-   //string from = getDOMAttribute(element, "from");
-   //string type = getDOMAttribute(element, "type");
+   string to = getDOMAttribute_(element, "to");
+   //string from = getDOMAttribute_(element, "from");
+   //string type = getDOMAttribute_(element, "type");
    
-   DOMElement* body_e = getSingleDOMElementByTagName(element, "body");
+   DOMElement* body_e = getSingleDOMElementByTagName_(element, "body");
    if(!body_e) {
       DEBUG_M("Message with no body...");
       return;
    }
 
    // Stamp on the 'from' attribute.
-   setDOMAttribute(element, "from", getFullJid());
+   setDOMAttribute_(element, "from", getFullJid());
    
    // Convert the Xerces dom back into text and send it to the recipient.
-   string forward = StringifyNode(element);  
+   string forward = StringifyNode_(element);  
    server_->WriteJid(to, forward.c_str(), forward.size());
    DEBUG_M("Forward '%s'", forward.c_str());
         
@@ -801,7 +801,7 @@ void LazyXMPPConnection::MessageHandler(DOMElement* element) {
 /**
  * Generates a serialized <presence> message.
  */
-string LazyXMPPConnection::generatePresence(const string& to, const string& type = "") const {
+string LazyXMPPConnection::generatePresence_(const string& to, const string& type = "") const {
    string response = XMPP_PRESENCE_01 + getFullJid() + XMPP_PRESENCE_02 + to;
    if(!type.empty()) {
       response.append(XMPP_PRESENCE_03 + type);
@@ -813,9 +813,9 @@ string LazyXMPPConnection::generatePresence(const string& to, const string& type
 /**
  * Handles a XMPP <presence>
  */
-void LazyXMPPConnection::PresenceHandler(DOMElement* element) {
-   string type = getDOMAttribute(element, "type");
-   string to = getDOMAttribute(element, "to");
+void LazyXMPPConnection::PresenceHandler_(DOMElement* element) {
+   string type = getDOMAttribute_(element, "type");
+   string to = getDOMAttribute_(element, "to");
  
    // Initial presence... Send probes to everyone.
    if(to.empty() && type.empty()) {
@@ -823,7 +823,7 @@ void LazyXMPPConnection::PresenceHandler(DOMElement* element) {
       for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
          
          string jid = (*it)->getJid();
-         string presence = generatePresence(jid, "probe");
+         string presence = generatePresence_(jid, "probe");
          (*it)->Write(presence.c_str(), presence.size());
       }
       server_->connections_mutex_.unlock();
@@ -831,19 +831,19 @@ void LazyXMPPConnection::PresenceHandler(DOMElement* element) {
    
    // Forward normal presences...
    if(!to.empty()) {
-      setDOMAttribute(element, "from", getFullJid());
-      string forward = StringifyNode(element);
+      setDOMAttribute_(element, "from", getFullJid());
+      string forward = StringifyNode_(element);
       server_->WriteJid(to, forward.c_str(), forward.size());
    }
 
    // Normal broadcast...
    if(to.empty()) {
-      setDOMAttribute(element, "from", getFullJid());
+      setDOMAttribute_(element, "from", getFullJid());
       server_->connections_mutex_.lock();
       for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
          string jid = (*it)->getJid();
-         setDOMAttribute(element, "to", jid);
-         string forward = StringifyNode(element);
+         setDOMAttribute_(element, "to", jid);
+         string forward = StringifyNode_(element);
          (*it)->Write(forward.c_str(), forward.size());
       }
       server_->connections_mutex_.unlock();
