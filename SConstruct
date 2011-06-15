@@ -68,7 +68,8 @@ if int(debug_flag):
 
 env.Append(CCFLAGS = ['-Wall'])
 
-env.Append(CCFLAGS = ['-std=c++0x'])
+# GCC 4.5, Boost-thread 1.42.0 and c++0x don't play well together: http://gcc.gnu.org/ml/gcc-bugs/2010-04/msg02907.html
+#env.Append(CCFLAGS = ['-std=c++0x'])
 
 objects = env.Object(sources)
 target = env.Program(target = prog_target, source=objects)
