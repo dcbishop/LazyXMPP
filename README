@@ -1,0 +1,31 @@
+LazyXMPP is a simple XMPP server.
+
+Consider it Alpha. Currently only basic features are supported.
+
+Building
+========
+
+LazyXMPP uses the scons build system
+apt-get install scons
+
+To make:
+scons
+
+To install:
+scons install
+
+To compile debug version:
+scons debug=1
+
+The folowing libraries are used:
+libboost-dev
+libboost-system-dev
+libboost-thread-dev
+libxerces-c-dev
+uuid-dev
+
+Using
+=====
+Start server with ./program
+
+To login with Pidgin, create an XMPP account using localhost. Use any username/password and ensure that under advanced 'Connection Security' is changed from 'Require encryption' to 'Use encryption if available'. Tick "Allow plaintext auth over unencrypted streams".
