@@ -49,6 +49,7 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
 
       void Process_(const int size);
       void Chooser_(const char* tagName_c, DOMElement* element);
+      bool enforeAuthorization_();
 
       inline void setNodeId_(const string& nodeid) { nodeid_ = nodeid; }
       inline void setResource_(const string& resource) { resource_ = resource; }
@@ -60,14 +61,16 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       void AuthPlainHandler_(const DOMElement* element);
       void IqHandler_(const DOMElement* element);
       void IqSetHandler_(const string& id, const DOMElement* element);
+      inline void IqSetQueryHandler_(const string& id, const DOMElement* element);
       void IqSetBind_(const string& id, const DOMElement* bind);
       void IqSetSession_(const string& id);
+      void IqSetQueryRegister_(const string& id, const DOMElement* element);
       inline void IqGetHandler_(const string& id, const DOMElement* element);
       inline void IqGetQueryHandler_(const string& id, const DOMElement* element);
       inline void IqGetQueryRosterHandler_(const string& id, const DOMElement* element);
       void IqGetQueryDiscoItems_(const string& id, const DOMElement* element);
       void IqGetQueryDiscoInfo_(const string& id, const DOMElement* element);
-      string IqGetQueryRegister_(const string& id, const DOMElement* element) const;
+      void IqGetQueryRegister_(const string& id, const DOMElement* element);
       inline void MessageHandler_(DOMElement* element);
       string StringifyNode_(const DOMNode* node) const;
       inline void PresenceHandler_(DOMElement* element);

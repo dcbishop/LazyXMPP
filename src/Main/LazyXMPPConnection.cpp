@@ -39,6 +39,7 @@ static const string XMPP_IQRESULT_BIND_02 = "'><bind xmlns='urn:ietf:params:xml:
 static const string XMPP_IQRESULT_BIND_03 = "</jid></bind></iq>";
 
 static const string XMPP_IQRESULT_SESSION_01 = "<session xmlns=\"urn:ietf:params:xml:ns:xmpp-session\"/>";
+const static string XMPP_IQRESULT_GETREGISTER = "<query xmlns='jabber:iq:register'><instructions>Choose a username and password for use with this service.</instructions><username/><password/></query>";
 
 static const string XMPP_IQ_01 = "<iq type=\"";
 static const string XMPP_IQ_02 = "\" id=\"";
@@ -74,6 +75,18 @@ LazyXMPPConnection::~LazyXMPPConnection() {
 void LazyXMPPConnection::Write(const char* data, const int& size) {
    DEBUG_M("WRITE: '%s'", data);
    boost::asio::async_write(socket_, boost::asio::buffer(data, size), boost::bind(&LazyXMPPConnection::WriteHandler_, shared_from_this(), boost::asio::placeholders::error));
+}
+
+/**
+ * Checks for a type of authorization. If unauthorized sends an error and returns true.
+ */
+bool LazyXMPPConnection::enforeAuthorization_() {
+   if(connection_type_ < 1) {
+      Write(XMPP_STREAMERROR_NOTAUTHORIZED.c_str(), XMPP_STREAMERROR_NOTAUTHORIZED.size());
+      BindRead_();
+      return true;
+   }
+   return false;
 }
 
 /**
@@ -115,16 +128,17 @@ void LazyXMPPConnection::Chooser_(const char* tag_name_c, DOMElement* element) {
       return;
    } 
 
+   if(iq.compare(tag_name_c) == 0) { // Match <iq> tag.
+      IqHandler_(element);
+      return;
+   } 
+
    // Everything below needs to be authorized.
-   if(connection_type_ < 1) {
-      Write(XMPP_STREAMERROR_NOTAUTHORIZED.c_str(), XMPP_STREAMERROR_NOTAUTHORIZED.size());
-      BindRead_();
+   if(enforeAuthorization_()) {
       return;
    }
 
-   if(iq.compare(tag_name_c) == 0) { // Match <iq> tag.
-      IqHandler_(element);
-   } else if (message.compare(tag_name_c) == 0) {
+   if (message.compare(tag_name_c) == 0) {
       MessageHandler_(element);
    } else if (presence.compare(tag_name_c) == 0) {
       PresenceHandler_(element);
@@ -501,12 +515,19 @@ void LazyXMPPConnection::IqSetHandler_(const string& id, const DOMElement* eleme
 
    DEBUG_M("IQ set '%s'", tag_name_s.c_str());
 
+   if(tag_name_s.compare("query") == 0) {
+      IqSetQueryHandler_(id, child);
+      return;
+   }
+
+   if(enforeAuthorization_()) {
+      return;
+   }
+
    if(tag_name_s.compare("bind") == 0) {
       IqSetBind_(id, child);
    } else if(tag_name_s.compare("session") == 0) {
       IqSetSession_(id);
-   } else if(tag_name_s.compare("query") == 0) {
-      // TODO
    }
    //TODO: No match, send error...
 }
@@ -613,19 +634,46 @@ void LazyXMPPConnection::IqGetHandler_(const string& id, const DOMElement* eleme
 
    DEBUG_M("IQ get '%s'", tag_name_s.c_str());
 
+   // Allow unauthorized query requests for 'register'.
+   if(tag_name_s.compare("query") == 0) {
+      IqGetQueryHandler_(id, child);
+      return;
+   }
+
+   // Everything below needs to be authorized.
+   if(enforeAuthorization_()) {
+      return;
+   }
+
    if(tag_name_s.compare("bind") == 0) {
       // TODO
+      DEBUG_M("Unhandled iq get bind.");
    } else if(tag_name_s.compare("session") == 0) {
       // TODO
-   } else if(tag_name_s.compare("query") == 0) {
-      IqGetQueryHandler_(id, child);
-   } else if(tag_name_s.compare("ping") == 0) {
+      DEBUG_M("Unhandled iq get session.");
+   }  else if(tag_name_s.compare("ping") == 0) {
       string response = generateIqHeader_("result", id, getFullJid(), getServer()->getServerHostname()) + XMPP_IQ_CLOSE;
       Write(response.c_str(), response.size());
    }
    
    // TODO: Error
 }
+
+void LazyXMPPConnection::IqSetQueryHandler_(const string& id, const DOMElement* element) {
+   string query_type_s = getDOMAttribute_(element, "xmlns");
+
+   if(query_type_s.compare("jabber:iq:register") == 0) {
+      IqSetQueryRegister_(id, element);
+   } 
+   // TODO: Error
+}
+
+void LazyXMPPConnection::IqSetQueryRegister_(const string& id, const DOMElement* element) {
+   // TODO: process register information
+   string errormsg = generateServiceUnavailableError_(id, element);
+   Write(errormsg.c_str(), errormsg.size());
+}
+
 
 /**
  * Handles an iq query request.
@@ -634,6 +682,17 @@ void LazyXMPPConnection::IqGetQueryHandler_(const string& id, const DOMElement* 
    DEBUG_M("Entering function...");
    
    string query_type_s = getDOMAttribute_(element, "xmlns");
+   DEBUG_M("Query type '%s'...", query_type_s.c_str() );
+
+   if(query_type_s.compare("jabber:iq:register") == 0) {
+      IqGetQueryRegister_(id, element);
+      return;
+   } 
+
+   // Everything below needs to be authorized.
+   if(enforeAuthorization_()) {
+      return;
+   }
    
    if(query_type_s.compare("jabber:iq:roster") == 0) {
       IqGetQueryRosterHandler_(id, element);
@@ -641,8 +700,6 @@ void LazyXMPPConnection::IqGetQueryHandler_(const string& id, const DOMElement* 
       IqGetQueryDiscoItems_(id, element);
    } else if(query_type_s.compare("http://jabber.org/protocol/disco#info") == 0) {
       IqGetQueryDiscoInfo_(id, element);
-   } else if(query_type_s.compare("jabber:iq:register") == 0) {
-      IqGetQueryRegister_(id, element);
    } else {
       string response = generateServiceUnavailableError_(id, element);
       Write(response.c_str(), response.size());
@@ -729,14 +786,19 @@ string LazyXMPPConnection::generateRosterItem_(const string& name, const string&
 }
 
 /**
- *
+ * Handles a request for registeration information.
  */
-string LazyXMPPConnection::IqGetQueryRegister_(const string& id, const DOMElement* element) const {
-   if(!getServer()->isRegistrationEnabled()) {
-      //TODO
-      return "";
+void LazyXMPPConnection::IqGetQueryRegister_(const string& id, const DOMElement* element) {
+   if(getServer()->isRegistrationEnabled() && connection_type_ == NOT_AUTHENTICATED) {
+      string response = generateIqHeader_("result", id, getFullJid()) + XMPP_IQRESULT_GETREGISTER  + XMPP_IQ_CLOSE;
+      Write(response.c_str(), response.size());
+      return;
    }
-   return "";
+
+   string errormsg = generateServiceUnavailableError_(id, element);
+   Write(errormsg.c_str(), errormsg.size());
+   return;
+   
 }
 
 /**
