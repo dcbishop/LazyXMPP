@@ -15,10 +15,22 @@ static const string XMPP_STREAM_RESPONSE_03 = "\" version=\"1.0\" xmlns=\"jabber
 static const string XMPP_STREAMFEATURES_01 = "<stream:features>";
 static const string XMPP_STREAMFEATURES_02 = "</stream:features>";
 
-static const string XMPP_STREAMFEATURES_MECHANISMS_01 = "<mechanisms xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\"><mechanism>ANONYMOUS</mechanism><mechanism>PLAIN</mechanism><required/></mechanisms>";
+static const string XMPP_STREAMFEATURES_MECHANISMS_01 = "<mechanisms xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\">";
+static const string XMPP_STREAMFEATURES_MECHANISMS_02 = "<required/></mechanisms>";
 
+static const string XMPP_STREAMFEATURES_MECHANISM_ANONYMOUS = "<mechanism>ANONYMOUS</mechanism>";
+static const string XMPP_STREAMFEATURES_MECHANISM_PLAIN = "<mechanism>PLAIN</mechanism>";
+
+static const string XMPP_STREAMFEATURES_REGISTER = "<register xmlns='http://jabber.org/features/iq-register'/>";
 static const string XMPP_STREAMFEATURES_BIND = "<bind xmlns=\"urn:ietf:params:xml:ns:xmpp-bind\"><required/></bind>";
 static const string XMPP_STREAMFEATURES_SESSION = "<session xmlns=\"urn:ietf:params:xml:ns:xmpp-session\"><optional/></session>";
+static const string XMPP_STREAMFEATURES_STARTTLS = "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>";
+
+static const string XMPP_STREAMERROR_INVALIDNAMESPACE = "<?xml version='1.0'?><stream:stream id='' xmlns:stream='http://etherx.jabber.org/streams' version='1.0' xmlns='jabber:client'><stream:error><invalid-namespace xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error></stream:stream>";
+static const string XMPP_STREAMERROR_NOTAUTHORIZED = "<stream:error><not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error></stream:stream>";
+
+static const string XMPP_AUTHFAILURE_INVALIDMECHANISM = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure></stream:stream>";
+static const string XMPP_AUTHFAILURE_MALFORMEDREQUEST = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><malformed-request/></failure>";
 
 static const string XMPP_SUCCESS = "<success xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\"/>";
 
@@ -53,7 +65,7 @@ static const string XMPP_PRESENCE_04 = "\"/>";
 LazyXMPPConnection::~LazyXMPPConnection() {
    DEBUG_M("Shutting down connection. '%s'", getNodeId().c_str());
    // TODO: Send a XMPP error to the client
-   server_->removeConnection_(this);
+   getServer()->removeConnection_(this);
 }
 
 /**
@@ -85,6 +97,7 @@ void LazyXMPPConnection::Chooser_(const char* tag_name_c, DOMElement* element) {
    // Everything below needs to be in an established stream...   
    if(!isInStream_) {
       DEBUG_M("XMPP recieved out of stream.");
+      Write(XMPP_STREAMERROR_INVALIDNAMESPACE.c_str(), XMPP_STREAMERROR_INVALIDNAMESPACE.size());
       BindRead_();
       return;
    }
@@ -104,7 +117,7 @@ void LazyXMPPConnection::Chooser_(const char* tag_name_c, DOMElement* element) {
 
    // Everything below needs to be authorized.
    if(connection_type_ < 1) {
-      // TODO: Send not authorized error response.
+      Write(XMPP_STREAMERROR_NOTAUTHORIZED.c_str(), XMPP_STREAMERROR_NOTAUTHORIZED.size());
       BindRead_();
       return;
    }
@@ -265,7 +278,7 @@ void LazyXMPPConnection::StreamHandler_(const DOMElement* element) {
  * Generates a stream request response XMPP stanza.
  */
 string LazyXMPPConnection::generateStreamResponse_(const string& streamid) const {
-   return XMPP_STREAM_RESPONSE_01 + server_->getServerHostname() + XMPP_STREAM_RESPONSE_02 + streamid + XMPP_STREAM_RESPONSE_03;
+   return XMPP_STREAM_RESPONSE_01 + getServer()->getServerHostname() + XMPP_STREAM_RESPONSE_02 + streamid + XMPP_STREAM_RESPONSE_03;
 }
 
 /**
@@ -283,7 +296,7 @@ string LazyXMPPConnection::generateRandomId_() const {
  * Generate a stream features XMPP stanza.
  */
 string LazyXMPPConnection::generateStreamFeatures_() const {
-   return XMPP_STREAMFEATURES_01 + generateStreamFeaturesTLS_() + generateStreamFeaturesMechanisms_() + generateStreamFeaturesCompression_() + generateStreamFeaturesBind_() + generateStreamFeaturesSession_() + XMPP_STREAMFEATURES_02;
+   return XMPP_STREAMFEATURES_01 + generateStreamFeaturesTLS_() + generateStreamFeaturesMechanisms_() + generateStreamFeaturesCompression_() + generateStreamFeaturesBind_() + generateStreamFeaturesSession_() + generateStreamFeaturesRegister_() + XMPP_STREAMFEATURES_02;
 }
 
 /**
@@ -291,7 +304,11 @@ string LazyXMPPConnection::generateStreamFeatures_() const {
  */
 string LazyXMPPConnection::generateStreamFeaturesTLS_() const {
    // FIXME: Support TLS...
-   return "";
+   if(!getServer()->isTLSEnabled()) {
+      return "";
+   }
+
+   return XMPP_STREAMFEATURES_STARTTLS;
 }
 
 /**
@@ -304,7 +321,7 @@ string LazyXMPPConnection::generateStreamFeaturesMechanisms_() const {
    if(connection_type_ > 0) {
       return "";
    }
-   return XMPP_STREAMFEATURES_MECHANISMS_01;
+   return XMPP_STREAMFEATURES_MECHANISMS_01 + XMPP_STREAMFEATURES_MECHANISM_ANONYMOUS + XMPP_STREAMFEATURES_MECHANISM_PLAIN +  XMPP_STREAMFEATURES_MECHANISMS_02;
 }
 
 /**
@@ -336,6 +353,13 @@ string LazyXMPPConnection::generateStreamFeaturesSession_() const {
    return "";
 }
 
+string LazyXMPPConnection::generateStreamFeaturesRegister_() const {
+   if(connection_type_ == 0 && !isBound_ && getServer()->isRegistrationEnabled() ) {
+      return XMPP_STREAMFEATURES_REGISTER;
+   }
+   return "";
+}
+
 /**
  * Handles an authentication request.
  */
@@ -355,9 +379,9 @@ void LazyXMPPConnection::AuthHandler_(const DOMElement* element) {
       Write(XMPP_SUCCESS.c_str(), XMPP_SUCCESS.size());
    } else {
       DEBUG_M("Recieved unknown auth.");
-      static const string badauthm = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure></stream:stream>";
+
       connection_close_ = true;
-      Write(badauthm.c_str(), badauthm.size());
+      Write(XMPP_AUTHFAILURE_INVALIDMECHANISM.c_str(), XMPP_AUTHFAILURE_INVALIDMECHANISM.size());
    }
 }
 
@@ -372,16 +396,15 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
       XMLByte* decoded_data_x = Base64::decodeToXMLByte(encoded_data_x, &decoded_length);
       if (!decoded_data_x || decoded_length < 1 || decoded_data_x[0] != 0) {
          DEBUG_M("Failed to decode base64...");
-         //TODO: Send an XMPP error...
+         Write(XMPP_AUTHFAILURE_MALFORMEDREQUEST.c_str(), XMPP_AUTHFAILURE_MALFORMEDREQUEST.size());
          return;
       }
 
       char* nodeid_start = (char*)&decoded_data_x[1];
       unsigned int nodeid_length = strnlen(nodeid_start, decoded_length-1);
-
       if(nodeid_length >= decoded_length-1) {
          DEBUG_M("Could not detect end of nodeid. Missing terminator character?");
-         // TODO: Weird data, abort propperly
+         Write(XMPP_AUTHFAILURE_MALFORMEDREQUEST.c_str(), XMPP_AUTHFAILURE_MALFORMEDREQUEST.size());
          //XMLString::release(&decoded_data_x);
          return;
       }
@@ -389,7 +412,7 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
       // The password is seperated by a null byte. Check for it.
       if(nodeid_start[nodeid_length] != '\0' || nodeid_length < 1) {
          DEBUG_M("No null character after nodeid...");
-         // TODO: Send error.
+         Write(XMPP_AUTHFAILURE_MALFORMEDREQUEST.c_str(), XMPP_AUTHFAILURE_MALFORMEDREQUEST.size());
          return;
       }
 
@@ -407,7 +430,7 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
       if(password_length+nodeid_length+2 != decoded_length) {
          // Decoded datasize doesn't match extracted nodeid/password size. Weirdness.
          DEBUG_M("Size mismatch");
-         // TODO: Error...
+         Write(XMPP_AUTHFAILURE_MALFORMEDREQUEST.c_str(), XMPP_AUTHFAILURE_MALFORMEDREQUEST.size());
       }
 
       // TODO: How do you release these in xerces3...
@@ -495,14 +518,14 @@ void LazyXMPPConnection::IqSetHandler_(const string& id, const DOMElement* eleme
 // TODO: This doesn't seem to work...
 void LazyXMPPConnection::addToRosters_() {
    DEBUG_M("Entered function...");
-   server_->connections_mutex_.lock();
-   for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
+   getServer()->connections_mutex_.lock();
+   for (Connections::iterator it=getServer()->connections_.begin() ; it != getServer()->connections_.end(); it++ ) {
       string to = (*it)->getJid();
       string forward = generateIqHeader_("set", generateRandomId_(), to, getFullJid()) + XMPP_ROSTER_RESPONSE_01 + generateRosterItem_(getNickname(), getFullJid(), "") + XMPP_ROSTER_RESPONSE_02 + XMPP_IQ_CLOSE;
       
       (*it)->Write(forward.c_str(), forward.size());
    }
-   server_->connections_mutex_.unlock();
+   getServer()->connections_mutex_.unlock();
 }
 
 /**
@@ -536,7 +559,7 @@ void LazyXMPPConnection::IqSetBind_(const string& id, const DOMElement* bind) {
  */
 //TODO: Add an option to use /> to close rather than > for one line responses.
 string LazyXMPPConnection::generateIqResultBind_(const string& id, const string& resource) const {
-   return XMPP_IQRESULT_BIND_01 + id + XMPP_IQRESULT_BIND_02 + getNodeId() + "@" + server_->getServerHostname() + "/" + resource + XMPP_IQRESULT_BIND_03;
+   return XMPP_IQRESULT_BIND_01 + id + XMPP_IQRESULT_BIND_02 + getNodeId() + "@" + getServer()->getServerHostname() + "/" + resource + XMPP_IQRESULT_BIND_03;
 }
 
 /**
@@ -560,7 +583,7 @@ string LazyXMPPConnection::getAddress() const {
  * Returns the connections Jabber ID (excluding the resource part).
  */
 string LazyXMPPConnection::getJid() const { 
-   return getNodeId() + "@" + server_->getServerHostname();
+   return getNodeId() + "@" + getServer()->getServerHostname();
 }
 
 /**
@@ -597,7 +620,7 @@ void LazyXMPPConnection::IqGetHandler_(const string& id, const DOMElement* eleme
    } else if(tag_name_s.compare("query") == 0) {
       IqGetQueryHandler_(id, child);
    } else if(tag_name_s.compare("ping") == 0) {
-      string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + XMPP_IQ_CLOSE;
+      string response = generateIqHeader_("result", id, getFullJid(), getServer()->getServerHostname()) + XMPP_IQ_CLOSE;
       Write(response.c_str(), response.size());
    }
    
@@ -618,10 +641,17 @@ void LazyXMPPConnection::IqGetQueryHandler_(const string& id, const DOMElement* 
       IqGetQueryDiscoItems_(id, element);
    } else if(query_type_s.compare("http://jabber.org/protocol/disco#info") == 0) {
       IqGetQueryDiscoInfo_(id, element);
+   } else if(query_type_s.compare("jabber:iq:register") == 0) {
+      IqGetQueryRegister_(id, element);
    } else {
-      string response = generateIqHeader_("error", id, getFullJid(), server_->getServerHostname()) + "<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" + XMPP_IQ_CLOSE;
+      string response = generateServiceUnavailableError_(id, element);
       Write(response.c_str(), response.size());
    }
+}
+
+
+string LazyXMPPConnection::generateServiceUnavailableError_(const string& id, const DOMElement* element) const {
+   return generateIqHeader_("error", id, getFullJid(), getServer()->getServerHostname()) + "<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" + XMPP_IQ_CLOSE;
 }
 
 /**
@@ -629,7 +659,7 @@ void LazyXMPPConnection::IqGetQueryHandler_(const string& id, const DOMElement* 
  */
 // TODO
 void LazyXMPPConnection::IqGetQueryDiscoItems_(const string& id, const DOMElement* element) {
-   string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
+   string response = generateIqHeader_("result", id, getFullJid(), getServer()->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
    Write(response.c_str(), response.size()); 
 }
 
@@ -638,7 +668,7 @@ void LazyXMPPConnection::IqGetQueryDiscoItems_(const string& id, const DOMElemen
  */
 // TODO
 void LazyXMPPConnection::IqGetQueryDiscoInfo_(const string& id, const DOMElement* element) {
-   string response = generateIqHeader_("result", id, getFullJid(), server_->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
+   string response = generateIqHeader_("result", id, getFullJid(), getServer()->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
    Write(response.c_str(), response.size()); 
 }
 
@@ -673,16 +703,16 @@ string LazyXMPPConnection::generateRosterItems_() const {
    DEBUG_M("Entering function...");
    // TODO
    string roster;
-   server_->connections_mutex_.lock();
+   getServer()->connections_mutex_.lock();
    
    // TODO: This adds everyone to everyone's roster. Switching to MUC chat makes more sense.
-   for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
+   for (Connections::iterator it=getServer()->connections_.begin() ; it != getServer()->connections_.end(); it++ ) {
       string nickname = (*it)->getNickname();
       string jid = (*it)->getJid();
       roster.append(generateRosterItem_(nickname, jid, ""));
    }
    
-   server_->connections_mutex_.unlock();
+   getServer()->connections_mutex_.unlock();
    return roster;
 }
 
@@ -696,6 +726,17 @@ string LazyXMPPConnection::generateRosterItem_(const string& name, const string&
    }
    result.append(XMPP_ITEM_CLOSE);
    return result;
+}
+
+/**
+ *
+ */
+string LazyXMPPConnection::IqGetQueryRegister_(const string& id, const DOMElement* element) const {
+   if(!getServer()->isRegistrationEnabled()) {
+      //TODO
+      return "";
+   }
+   return "";
 }
 
 /**
@@ -792,7 +833,7 @@ void LazyXMPPConnection::MessageHandler_(DOMElement* element) {
    
    // Convert the Xerces dom back into text and send it to the recipient.
    string forward = StringifyNode_(element);  
-   server_->WriteJid(to, forward.c_str(), forward.size());
+   getServer()->WriteJid(to, forward.c_str(), forward.size());
    DEBUG_M("Forward '%s'", forward.c_str());
         
    return;
@@ -819,33 +860,33 @@ void LazyXMPPConnection::PresenceHandler_(DOMElement* element) {
  
    // Initial presence... Send probes to everyone.
    if(to.empty() && type.empty()) {
-      server_->connections_mutex_.lock();
-      for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
+      getServer()->connections_mutex_.lock();
+      for (Connections::iterator it=getServer()->connections_.begin() ; it != getServer()->connections_.end(); it++ ) {
          
          string jid = (*it)->getJid();
          string presence = generatePresence_(jid, "probe");
          (*it)->Write(presence.c_str(), presence.size());
       }
-      server_->connections_mutex_.unlock();
+      getServer()->connections_mutex_.unlock();
    }
    
    // Forward normal presences...
    if(!to.empty()) {
       setDOMAttribute_(element, "from", getFullJid());
       string forward = StringifyNode_(element);
-      server_->WriteJid(to, forward.c_str(), forward.size());
+      getServer()->WriteJid(to, forward.c_str(), forward.size());
    }
 
    // Normal broadcast...
    if(to.empty()) {
       setDOMAttribute_(element, "from", getFullJid());
-      server_->connections_mutex_.lock();
-      for (Connections::iterator it=server_->connections_.begin() ; it != server_->connections_.end(); it++ ) {
+      getServer()->connections_mutex_.lock();
+      for (Connections::iterator it=getServer()->connections_.begin() ; it != getServer()->connections_.end(); it++ ) {
          string jid = (*it)->getJid();
          setDOMAttribute_(element, "to", jid);
          string forward = StringifyNode_(element);
          (*it)->Write(forward.c_str(), forward.size());
       }
-      server_->connections_mutex_.unlock();
+      getServer()->connections_mutex_.unlock();
    }
 }

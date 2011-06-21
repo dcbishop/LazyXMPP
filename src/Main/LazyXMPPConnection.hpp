@@ -33,6 +33,8 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       string getResource() const { return resource_; } // ID of the specific connection (for multiple logins).
       string getNickname() const { return nickname_; } // Displayed nickname.
       
+      LazyXMPP* getServer() const { return server_; }
+      
       enum ConnectionType { NOT_AUTHENTICATED, ANONYMOUS, AUTHENTICATED };
 
    private:
@@ -65,9 +67,11 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       inline void IqGetQueryRosterHandler_(const string& id, const DOMElement* element);
       void IqGetQueryDiscoItems_(const string& id, const DOMElement* element);
       void IqGetQueryDiscoInfo_(const string& id, const DOMElement* element);
+      string IqGetQueryRegister_(const string& id, const DOMElement* element) const;
       inline void MessageHandler_(DOMElement* element);
       string StringifyNode_(const DOMNode* node) const;
       inline void PresenceHandler_(DOMElement* element);
+      inline string generateServiceUnavailableError_(const string& id, const DOMElement* element) const;
 
       // Functions to generate XMPP stanzas...
       inline string generateStreamResponse_(const string& streamid) const;
@@ -78,6 +82,8 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       inline string generateStreamFeaturesCompression_() const;
       inline string generateStreamFeaturesBind_() const;
       inline string generateStreamFeaturesSession_() const;
+      inline string generateStreamFeaturesRegister_() const;
+
       inline string generateIqHeader_(const string& type, const string& id, const string& to = "", const string& from = "") const;
       inline string generateIqResultBind_(const string& id, const string& resource) const;
       inline string generateRosterItems_() const;

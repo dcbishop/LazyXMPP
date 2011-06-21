@@ -26,6 +26,14 @@ class LazyXMPP {
       inline string getServerHostname() { return hostname_; }
       inline void setServerHostname(string hostname) { hostname_ = hostname; }
 
+      void WriteJid(const string& jid, const char* data, const int& size);
+
+      bool isPlainAuthEnabled() { return enableRegistration_; }
+      bool isAnonymousAuthEnabled() { return enableRegistration_; }
+      bool isTLSEnabled() { return enableTLS_; }
+      bool isRegistrationEnabled() { return enableRegistration_; }
+      bool isUnsecureAuthEnabled() { return enableUnsecureAuth_; } // True if accepts plain auth/registeration over unencrytped stream
+
    friend class LazyXMPPConnection;
    
    private:
@@ -33,8 +41,7 @@ class LazyXMPP {
       void AcceptHandler_(LazyXMPPConnectionPtr session, const boost::system::error_code& error);
       void addConnection_(LazyXMPPConnection* connection) { connections_mutex_.lock(); connections_ .insert(connection); connections_mutex_.unlock();}
       void removeConnection_(LazyXMPPConnection* connection) { connections_mutex_.lock(); connections_ .erase(connection); connections_mutex_.unlock();}
-      void WriteJid(const string& jid, const char* data, const int& size);
-
+      
       const int port_;
       boost::asio::io_service io_service_;
       tcp::acceptor* acceptor4_;
@@ -48,6 +55,12 @@ class LazyXMPP {
       bool enableIPv6_;
       bool enableIPv4_;
       bool isDualStack_;
+      
+      bool enableTLS_;
+      bool enableRegistration_;
+      bool enablePlainAuth_;
+      bool enableUnsecureAuth_;
+      bool enableAnonymousAuth_;
 
 };
 
