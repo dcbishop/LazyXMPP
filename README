@@ -24,7 +24,7 @@ libboost-thread-dev
 libxerces-c-dev
 uuid-dev
 
-Using
+Usage
 =====
 Start server with ./program
 
