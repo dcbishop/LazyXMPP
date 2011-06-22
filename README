@@ -20,9 +20,11 @@ scons debug=1
 The folowing libraries are used:
 libboost-dev
 libboost-system-dev
+libboost-filesystem-dev
 libboost-thread-dev
 libxerces-c-dev
 uuid-dev
+libsqlite3-dev
 
 Usage
 =====

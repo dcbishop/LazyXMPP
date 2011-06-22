@@ -87,7 +87,7 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       inline string generateStreamFeaturesSession_() const;
       inline string generateStreamFeaturesRegister_() const;
 
-      inline string generateIqHeader_(const string& type, const string& id, const string& to = "", const string& from = "") const;
+      inline string generateIqHeader_(const string& type, const string& id, const string& to = "", const string& from = "", const bool nobody = false) const;
       inline string generateIqResultBind_(const string& id, const string& resource) const;
       inline string generateRosterItems_() const;
       string generateRosterItem_(const string& name, const string& jid, const string& group) const;

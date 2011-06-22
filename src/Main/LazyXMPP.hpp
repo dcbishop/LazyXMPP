@@ -13,6 +13,7 @@ using namespace boost::asio;
 using boost::asio::ip::tcp;
 using boost::shared_ptr;
 
+#include "../Main/UserDB.hpp"
 #include "../Main/LazyXMPPConnection.hpp"
 
 typedef set<LazyXMPPConnection*> Connections;
@@ -41,7 +42,10 @@ class LazyXMPP {
       void AcceptHandler_(LazyXMPPConnectionPtr session, const boost::system::error_code& error);
       void addConnection_(LazyXMPPConnection* connection) { connections_mutex_.lock(); connections_ .insert(connection); connections_mutex_.unlock();}
       void removeConnection_(LazyXMPPConnection* connection) { connections_mutex_.lock(); connections_ .erase(connection); connections_mutex_.unlock();}
-      
+      UserDB* getUserDB() { return &userdb; }
+
+      UserDB userdb;
+
       const int port_;
       boost::asio::io_service io_service_;
       tcp::acceptor* acceptor4_;

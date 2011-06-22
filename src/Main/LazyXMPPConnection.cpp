@@ -481,13 +481,18 @@ void LazyXMPPConnection::IqHandler_(const DOMElement* element) {
    if(iq_type.compare("set") == 0) {
       DEBUG_M("Recieved iq set.");
       IqSetHandler_(id, element);
-   } if(iq_type.compare("get") == 0) {
+      return;
+   } else if(iq_type.compare("get") == 0) {
       IqGetHandler_(id, element);
+      return;
    } else if(iq_type.compare("result") == 0) {
       // Do nothing...
+      // If 'result' is needed, enforce authorization.
+      return;
    } else {
-      //TODO: Send XMPP error...
-      
+      // TODO: Send XMPP bad-request error...
+      // <iq from='im.example.com' id='zj3v142b' to='juliet@im.example.com/balcony' type='error'><error type='modify'><bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>
+
       DEBUG_M("Recieved unknown iq.");
       //static const string badauthm = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure></stream:stream>";
       //connection_close_ = true;
@@ -668,10 +673,69 @@ void LazyXMPPConnection::IqSetQueryHandler_(const string& id, const DOMElement* 
    // TODO: Error
 }
 
+/**
+ * Handels a XMPP In-Band registeration (XEP-0077).
+ */
 void LazyXMPPConnection::IqSetQueryRegister_(const string& id, const DOMElement* element) {
    // TODO: process register information
-   string errormsg = generateServiceUnavailableError_(id, element);
-   Write(errormsg.c_str(), errormsg.size());
+   if(connection_type_ != NOT_AUTHENTICATED || !getServer()->isRegistrationEnabled()) {
+      string errormsg = generateServiceUnavailableError_(id, element);
+      Write(errormsg.c_str(), errormsg.size());
+   }
+
+   /*int username_min_len = 5;
+   int password_min_len = 5;*/
+
+   string username;
+   string password;
+   string email;
+   
+   //TODO: Extract username, password and possibly email.
+
+   DOMElement* username_e = getSingleDOMElementByTagName_(element, "username");
+   if(username_e) {
+      username = getTextContent_(username_e);
+   }
+
+   DOMElement* password_e = getSingleDOMElementByTagName_(element, "password");
+   if(password_e) {
+      password = getTextContent_(password_e);
+   }
+
+   DOMElement* email_e = getSingleDOMElementByTagName_(element, "email");
+   if(email_e) {
+      email = getTextContent_(email_e);
+   }
+   
+   DEBUG_M("Registeration recieved, '%s', '%s'", username.c_str(), password.c_str());
+
+   // TODO
+
+   /*// Enforce a username of a specific size.
+   if(username.size() < username_min_len || username.size() < 1) {
+      // TODO: ERROR
+      return;
+   }
+
+   // Stop players from using names like 'admin', 'administrator', or anything else.
+   if(getServer()->isUsernameRestricted(username)) {
+      // TODO: ERROR
+      return;
+   }*/
+
+   // Check to see if a user with that name is already registered.
+   if(getServer()->getUserDB()->isRegistered(username)) {
+      string err_s = generateIqHeader_("error", id) + "<error code='409' type='cancel'><conflict xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" + XMPP_IQ_CLOSE;
+      Write(err_s.c_str(), err_s.size());
+      return;
+   }
+
+   // TODO: Check password is long enough, etc...
+
+   getServer()->getUserDB()->registerUser(username, password);
+
+   string successful = generateIqHeader_("result", id, "", "", true);
+   Write(successful.c_str(), successful.size());
 }
 
 
@@ -732,7 +796,7 @@ void LazyXMPPConnection::IqGetQueryDiscoInfo_(const string& id, const DOMElement
 /**
  * Generates a serialzed <iq> header for a XMPP stanza.
  */
-string LazyXMPPConnection::generateIqHeader_(const string& type, const string& id, const string& to, const string& from) const {
+string LazyXMPPConnection::generateIqHeader_(const string& type, const string& id, const string& to, const string& from, const bool nobody) const {
    string header = XMPP_IQ_01 + type + XMPP_IQ_02 + id;
    if(!to.empty()) {
       header.append(XMPP_IQ_03 + to);
@@ -740,7 +804,11 @@ string LazyXMPPConnection::generateIqHeader_(const string& type, const string& i
    if(!from.empty()) {
       header.append(XMPP_IQ_04 + from);
    }
-   header.append(XMPP_IQ_05);
+   if(!nobody) {
+      header.append(XMPP_IQ_05);
+   } else {
+      header.append("\"/>");
+   }
    return header;
 }
 
@@ -795,6 +863,7 @@ void LazyXMPPConnection::IqGetQueryRegister_(const string& id, const DOMElement*
       return;
    }
 
+   // Return an error if we don't support In-band registration.
    string errormsg = generateServiceUnavailableError_(id, element);
    Write(errormsg.c_str(), errormsg.size());
    return;
@@ -887,6 +956,7 @@ void LazyXMPPConnection::MessageHandler_(DOMElement* element) {
    DOMElement* body_e = getSingleDOMElementByTagName_(element, "body");
    if(!body_e) {
       DEBUG_M("Message with no body...");
+      //TODO: Error.
       return;
    }
 
