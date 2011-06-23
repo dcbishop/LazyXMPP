@@ -12,9 +12,10 @@ LazyXMPP::LazyXMPP(int port, bool enableIPv6, bool enableIPv4) : port_(port), en
    // TODO: Security!
    enableTLS_ = false;
    enableRegistration_ = true;
+   enableAnonymousAuth_ = false;
    enablePlainAuth_ = true;
-   enableUnsecureAuth_ = true;
-   enableAnonymousAuth_ = true;
+   enableUnencryptedAnonymousAuth_ = true;
+   enableUnencryptedPlainAuth_ = true;
    
    if(!enableIPv6 && !enableIPv4) {
       LOG("You must enable a socket type!");

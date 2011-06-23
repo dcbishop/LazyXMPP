@@ -33,7 +33,9 @@ class LazyXMPP {
       bool isAnonymousAuthEnabled() { return enableRegistration_; }
       bool isTLSEnabled() { return enableTLS_; }
       bool isRegistrationEnabled() { return enableRegistration_; }
-      bool isUnsecureAuthEnabled() { return enableUnsecureAuth_; } // True if accepts plain auth/registeration over unencrytped stream
+      bool isUnencryptedAnonymousAuthEnabled() { return enableUnencryptedAnonymousAuth_; } // True if accepts plain auth/registeration over unencrytped stream
+      bool isUnencryptedPlainAuthEnabled() { return enableUnencryptedPlainAuth_; } // True if accepts plain auth/registeration over unencrytped stream
+
 
    friend class LazyXMPPConnection;
    
@@ -63,7 +65,8 @@ class LazyXMPP {
       bool enableTLS_;
       bool enableRegistration_;
       bool enablePlainAuth_;
-      bool enableUnsecureAuth_;
+      bool enableUnencryptedAnonymousAuth_;
+      bool enableUnencryptedPlainAuth_;
       bool enableAnonymousAuth_;
 
 };

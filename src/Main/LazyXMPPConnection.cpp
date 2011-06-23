@@ -31,6 +31,9 @@ static const string XMPP_STREAMERROR_NOTAUTHORIZED = "<stream:error><not-authori
 
 static const string XMPP_AUTHFAILURE_INVALIDMECHANISM = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure></stream:stream>";
 static const string XMPP_AUTHFAILURE_MALFORMEDREQUEST = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><malformed-request/></failure>";
+static const string XMPP_AUTHFAILURE_NOTAUTHORIZED = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></failure>";
+static const string XMPP_AUTHFAILURE_ENCRYPTIONREQUIRED = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><encryption-required/></failure>";
+static const string XMPP_AUTHFAILURE_MECHANISMTOOWEAK = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism-too-weak/></failure>";
 
 static const string XMPP_SUCCESS = "<success xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\"/>";
 
@@ -335,7 +338,17 @@ string LazyXMPPConnection::generateStreamFeaturesMechanisms_() const {
    if(connection_type_ > 0) {
       return "";
    }
-   return XMPP_STREAMFEATURES_MECHANISMS_01 + XMPP_STREAMFEATURES_MECHANISM_ANONYMOUS + XMPP_STREAMFEATURES_MECHANISM_PLAIN +  XMPP_STREAMFEATURES_MECHANISMS_02;
+   string mechanisms_s = XMPP_STREAMFEATURES_MECHANISMS_01;
+
+   if(getServer()->isAnonymousAuthEnabled()) {
+      mechanisms_s.append(XMPP_STREAMFEATURES_MECHANISM_ANONYMOUS);
+   }
+
+   if(getServer()->isPlainAuthEnabled()) {
+     mechanisms_s.append(XMPP_STREAMFEATURES_MECHANISM_PLAIN);
+   }
+   mechanisms_s.append(XMPP_STREAMFEATURES_MECHANISMS_02);
+   return mechanisms_s;
 }
 
 /**
@@ -380,27 +393,40 @@ string LazyXMPPConnection::generateStreamFeaturesRegister_() const {
 void LazyXMPPConnection::AuthHandler_(const DOMElement* element) {
    string auth_mechanism = getDOMAttribute_(element, "mechanism");
    
-   if(auth_mechanism.compare("PLAIN") == 0) {
+   if((auth_mechanism.compare("PLAIN") == 0) && getServer()->isPlainAuthEnabled()){
+      if(!isEncrypted() && !getServer()->isUnencryptedPlainAuthEnabled()) {
+         // Not secure enough.
+         Write(XMPP_AUTHFAILURE_ENCRYPTIONREQUIRED.c_str(), XMPP_AUTHFAILURE_ENCRYPTIONREQUIRED.size());
+         return;
+      }
       DEBUG_M("Recieved plain auth.");
       AuthPlainHandler_(element);
-   } else if(auth_mechanism.compare("ANONYMOUS") == 0) {
-      DEBUG_M("Recieved anonymous auth.");
+      return;
+   } else if((auth_mechanism.compare("ANONYMOUS") == 0) && getServer()->isAnonymousAuthEnabled()) {
+      if(!isEncrypted() && !getServer()->isUnencryptedAnonymousAuthEnabled()) {
+         // Not secure enough.
+         Write(XMPP_AUTHFAILURE_ENCRYPTIONREQUIRED.c_str(), XMPP_AUTHFAILURE_ENCRYPTIONREQUIRED.size());
+         return;
+      }
       setNodeId_(generateRandomId_());
       if(getNickname().empty()) {
          setNickname_(getNodeId());
       }
       connection_type_ = ANONYMOUS;
       Write(XMPP_SUCCESS.c_str(), XMPP_SUCCESS.size());
+      return;
    } else {
       DEBUG_M("Recieved unknown auth.");
 
       connection_close_ = true;
       Write(XMPP_AUTHFAILURE_INVALIDMECHANISM.c_str(), XMPP_AUTHFAILURE_INVALIDMECHANISM.size());
+      return;
    }
 }
 
 /**
  * Handles using an insecure plain auth.
+ * http://tools.ietf.org/html/rfc4616
  */
 void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
 
@@ -422,7 +448,7 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
          //XMLString::release(&decoded_data_x);
          return;
       }
-      
+
       // The password is seperated by a null byte. Check for it.
       if(nodeid_start[nodeid_length] != '\0' || nodeid_length < 1) {
          DEBUG_M("No null character after nodeid...");
@@ -450,10 +476,13 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
       // TODO: How do you release these in xerces3...
       //XMLString::release(&decoded_data_x);
 
-      // TODO checkpassword or something...
-      /*static const string badauthm = "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure></stream:stream>";
-      connection_close_ = true;
-      Write(badauthm.c_str(), badauthm.size());*/
+      // Check password is correct...
+      if(!getServer()->getUserDB()->verifyPassword(nodeid, password)) {
+         connection_close_ = true;
+         LOG("Login failure for user: '%s' from '%s'", nodeid, getAddress().c_str());
+         Write(XMPP_AUTHFAILURE_NOTAUTHORIZED.c_str(), XMPP_AUTHFAILURE_NOTAUTHORIZED.size());
+         return;
+      }
 
       // Set the node id (the bit befoure the @ in a JID). Also set the displayed nick name if there isn't one already.
       setNodeId_(nodeid);
@@ -476,7 +505,7 @@ void LazyXMPPConnection::AuthPlainHandler_(const DOMElement* element) {
 void LazyXMPPConnection::IqHandler_(const DOMElement* element) {
    string id = getDOMAttribute_(element, "id");
    string iq_type = getDOMAttribute_(element, "type");
-   
+
    // See what type of iq request this is...
    if(iq_type.compare("set") == 0) {
       DEBUG_M("Recieved iq set.");
@@ -790,6 +819,7 @@ void LazyXMPPConnection::IqGetQueryDiscoItems_(const string& id, const DOMElemen
 // TODO
 void LazyXMPPConnection::IqGetQueryDiscoInfo_(const string& id, const DOMElement* element) {
    string response = generateIqHeader_("result", id, getFullJid(), getServer()->getServerHostname()) + "<query xmlns=\"http://jabber.org/protocol/disco#items\"></query></iq>";
+   // TODO: Anonymous account identity response: http://xmpp.org/extensions/xep-0175.html#disco
    Write(response.c_str(), response.size()); 
 }
 

@@ -22,7 +22,16 @@ class LazyXMPP;
 
 class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnection> {
    public:
-      LazyXMPPConnection(boost::asio::io_service& io_service, LazyXMPP* server): socket_(io_service), server_(server), connection_type_(NOT_AUTHENTICATED), connection_close_(false), isInStream_(false), isBound_(false) { data_[0] = '\0'; }
+      LazyXMPPConnection(boost::asio::io_service& io_service, LazyXMPP* server):
+         socket_(io_service),
+         server_(server),
+         connection_type_(NOT_AUTHENTICATED),
+         connection_close_(false),
+         isInStream_(false),
+         isBound_(false),
+         isSession_(false),
+         isEncrypted_(false)
+         { data_[0] = '\0'; }
       ~LazyXMPPConnection();
 
       string getAddress() const; // IP address (maybe IPv6, IPv4 or on dual stack, IPv4 as an IPv6 (::ffff:123.123.123.123)
@@ -34,6 +43,8 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       string getNickname() const { return nickname_; } // Displayed nickname.
       
       LazyXMPP* getServer() const { return server_; }
+      
+      bool isEncrypted() const { return isEncrypted_; }
       
       enum ConnectionType { NOT_AUTHENTICATED, ANONYMOUS, AUTHENTICATED };
 
@@ -106,12 +117,13 @@ class LazyXMPPConnection: public boost::enable_shared_from_this<LazyXMPPConnecti
       static const unsigned int buffer_size_ = 8192;
       static const int max_length_ = buffer_size_-1;
       char data_[buffer_size_];
+
       int connection_type_;
       bool connection_close_;
-
       bool isInStream_;
       bool isBound_;
       bool isSession_;
+      bool isEncrypted_;
 
       string nodeid_;
       string resource_;
