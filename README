@@ -1,6 +1,10 @@
 LazyXMPP is a simple XMPP server.
 
 Consider it Alpha. Currently only basic features are supported.
+* Anonymous Authentication (RFC 4505 / XEP-0175).
+* Plain Text Authentication (RFC 4615).
+* In-Band Registration (XEP-0077).
+* Passwords stored in a SQLite3 database using PBKDF2, HMAC-SHA-512.
 
 Building
 ========
@@ -31,4 +35,4 @@ Usage
 =====
 Start server with ./program
 
-To login with Pidgin, create an XMPP account using localhost. Use any username/password and ensure that under advanced 'Connection Security' is changed from 'Require encryption' to 'Use encryption if available'. Tick "Allow plaintext auth over unencrypted streams".
+To login with Pidgin. Ensure that under advanced 'Connection Security' is changed from 'Require encryption' to 'Use encryption if available'. Tick "Allow plaintext auth over unencrypted streams".
