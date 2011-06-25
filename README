@@ -25,6 +25,7 @@ libboost-thread-dev
 libxerces-c-dev
 uuid-dev
 libsqlite3-dev
+libcrypto++-dev
 
 Usage
 =====

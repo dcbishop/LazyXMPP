@@ -6,11 +6,15 @@ using namespace std;
 
 #include <sqlite3.h>
 
+#include <crypto++/cryptlib.h>
+#include <crypto++/sha.h>
+#include <crypto++/osrng.h>
+#include <crypto++/integer.h>
+#include <crypto++/pwdbased.h>
+using namespace CryptoPP;
+
 #include "../Debug/console.h"
 
-// TODO: Security, store salted hashed passwords
-// TODO: Sanatize all the input!
-      
 class UserDB {
    public:
       UserDB();
@@ -26,9 +30,6 @@ class UserDB {
 
       string findOrCreateDB_() {
          string dbfile = findDB_();
-         if(dbfile.empty()) {
-            // Create DB
-         }
          return dbfile;
       }
 
@@ -46,6 +47,11 @@ class UserDB {
       sqlite3_stmt* register_stmt;
       sqlite3_stmt* lookup_stmt;
       sqlite3_stmt* createdb_stmt;
+
+      PKCS5_PBKDF2_HMAC<SHA512> dk;
+      AutoSeededRandomPool rng;
+      int salt_len_;
+      int rounds_;
 };
 
 #endif /* LAZYXMPP_USERDB_HPP_ */

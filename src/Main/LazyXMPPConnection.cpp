@@ -718,8 +718,6 @@ void LazyXMPPConnection::IqSetQueryRegister_(const string& id, const DOMElement*
    string username;
    string password;
    string email;
-   
-   //TODO: Extract username, password and possibly email.
 
    DOMElement* username_e = getSingleDOMElementByTagName_(element, "username");
    if(username_e) {
@@ -735,7 +733,7 @@ void LazyXMPPConnection::IqSetQueryRegister_(const string& id, const DOMElement*
    if(email_e) {
       email = getTextContent_(email_e);
    }
-   
+
    DEBUG_M("Registeration recieved, '%s', '%s'", username.c_str(), password.c_str());
 
    // TODO

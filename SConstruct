@@ -14,7 +14,7 @@ debug_flag = ARGUMENTS.get('debug', 0)
 
 env.Tool('colourful', toolpath=['scons-tools'])
 
-env.AppendUnique(LIBS=['boost_thread', 'libboost_system', 'libboost_filesystem', 'xerces-c', 'uuid', 'sqlite3'])
+env.AppendUnique(LIBS=['boost_thread', 'libboost_system', 'libboost_filesystem', 'xerces-c', 'uuid', 'sqlite3', 'libcrypto++'])
 
 #env.AppendUnique(LIBS=['m', 'IL', 'mxml', 'rcbc', 'luabind'])
 #env.Tool('qt')

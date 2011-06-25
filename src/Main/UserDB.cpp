@@ -25,10 +25,9 @@ UserDB::UserDB() {
       ERROR("Could not open database.");
    }
 
-   string createdb_s = "CREATE TABLE users (username CHAR(25), password CHAR(255), PRIMARY KEY(username), UNIQUE(username));";
-   string register_s = "INSERT INTO users (username, password) VALUES (?, ?);";
+   string createdb_s = "CREATE TABLE users (username, hash, salt, PRIMARY KEY(username), UNIQUE(username));";
+   string register_s = "INSERT INTO users (username, hash, salt) VALUES (?, ?, ?);";
    string lookup_s = "SELECT * FROM users WHERE username = ?;";
-   
 
    if(sqlite3_prepare_v2(db_, createdb_s.c_str(), -1, &createdb_stmt, NULL) == SQLITE_OK) {
       result = sqlite3_step(createdb_stmt);
@@ -46,7 +45,9 @@ UserDB::UserDB() {
       closeDB_();
       throw "User database error.";
    }
-   
+
+   salt_len_ = 16;
+   rounds_ = 5000;
 }
 
 UserDB::~UserDB() {
@@ -65,11 +66,17 @@ string UserDB::findDB_() const {
 }
 
 bool UserDB::registerUser(const string& username, const string& password) {
+   byte hash[SHA512::DIGESTSIZE];
+   byte salt[salt_len_];
+   rng.GenerateBlock(salt, salt_len_); // Generate some random salt
+   dk.DeriveKey(hash, SHA512::DIGESTSIZE, (byte)0, (const byte*)password.c_str(), password.length(), salt, salt_len_, rounds_, 0); // Hash+Salt password
+
+   // Bind the SQL paramaters
    sqlite3_bind_text(register_stmt, 1, username.c_str(), username.size(), SQLITE_TRANSIENT);
-   sqlite3_bind_text(register_stmt, 2, password.c_str(), password.size(), SQLITE_TRANSIENT);
+   sqlite3_bind_text(register_stmt, 2, (char*) hash, SHA512::DIGESTSIZE, SQLITE_TRANSIENT);
+   sqlite3_bind_text(register_stmt, 3, (char*) salt, salt_len_, SQLITE_TRANSIENT);
 
-   // TODO: Security, Hash and salt password!
-
+   // Perform the SQL register query
    if(sqlite3_step(register_stmt) != SQLITE_DONE) {
       ERROR("Failed to register new user '%s'.", username.c_str());
    }
@@ -97,9 +104,14 @@ bool UserDB::verifyPassword(const string& username, const string& password) {
    sqlite3_bind_text(lookup_stmt, 1, username.c_str(), username.size(), SQLITE_TRANSIENT);
 
    if(sqlite3_step(lookup_stmt) == SQLITE_ROW) {
-      const char* pass = (char*)sqlite3_column_text(lookup_stmt, 1);
-      if(password.compare(pass) == 0) {
-         return true; // Password matches the one in database
+      byte checkhash[SHA512::DIGESTSIZE];
+      const char* storedhash = (char*)sqlite3_column_text(lookup_stmt, 1);
+      const char* salt = (char*)sqlite3_column_text(lookup_stmt, 2);
+
+      // Check the stored hash is the same as the one we generated from the password+salt
+      dk.DeriveKey(checkhash, SHA512::DIGESTSIZE, (byte)0, (const byte*)password.c_str(), password.length(), (byte*)salt, salt_len_, rounds_, 0);
+      if(strncmp((char*)checkhash, storedhash, strlen(storedhash)) == 0) {
+         return true;
       }
    }
 
